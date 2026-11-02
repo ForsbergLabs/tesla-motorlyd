@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#0a0a0c">
+  <title>Tesla Motorlyd</title>
+  <link rel="icon" href="favicon.ico">
+  <style>
+    :root {
+      --bg: #0a0a0c;
+      --panel: rgba(20, 20, 28, 0.85);
+      --accent: #ff4d00;
+      --accent2: #ffb347;
+      --text: #f0f2f8;
+      --muted: #8a90a8;
+      --ok: #3ee08f;
+      --border: rgba(255,255,255,0.12);
+      --pad: clamp(6px, 1.6vw, 12px);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+    body { display: flex; flex-direction: column; }
+    button { font-family: inherit; }
+
+    header {
+      padding: 8px 12px;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      background: linear-gradient(180deg, rgba(0,0,0,.4), transparent);
+      border-bottom: 1px solid var(--border);
+    }
+    h1 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.3px; white-space: nowrap; }
+    .status { font-size: 12px; color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    main {
+      flex: 1; display: flex; flex-direction: column; gap: var(--pad);
+      padding: var(--pad); min-height: 0; overflow-y: auto; overflow-x: hidden;
+    }
+    .panel {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      padding: var(--pad); backdrop-filter: blur(12px);
+    }
+
+    /* Engines: one compact, horizontally scrolling row (fits a narrow split-screen pane) */
+    .engines {
+      display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden;
+      scrollbar-width: thin; padding: 6px; flex: none;
+    }
+    .eng-btn {
+      flex: none; background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 12px; color: var(--text);
+      font-size: 14px; font-weight: 600; cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .eng-btn.active { background: rgba(255,77,0,.18); border-color: var(--accent); color: var(--accent2); }
+    .eng-btn:active { transform: scale(0.97); }
+
+    .hud { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; padding: 8px 10px 10px; flex: none; }
+    .rpm { font-size: clamp(30px, 8vw, 44px); font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -1px; line-height: 1; }
+    .rpm small { font-size: 14px; color: var(--muted); font-weight: 500; }
+    .gear-big { font-size: clamp(30px, 8vw, 42px); font-weight: 800; color: var(--accent2); min-width: 46px; text-align: center; line-height: 1; }
+    .meta { display: flex; gap: 12px; justify-content: flex-end; font-size: 12px; color: var(--muted); text-align: center; }
+    .meta b { color: var(--text); font-size: 18px; font-variant-numeric: tabular-nums; }
+    .meta .speed b { font-size: 26px; }
+    .tach { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); position: relative; overflow: hidden; margin-top: 4px; }
+    .tach .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, var(--ok), var(--accent2) 70%, var(--accent)); transition: width .06s linear; }
+    .tach .red { position: absolute; top: 0; bottom: 0; right: 0; width: 8%; background: rgba(255,40,40,.35); }
+
+    .controls { display: flex; flex-direction: column; gap: 8px; flex: none; }
+    .big-btn { height: 52px; border-radius: 12px; border: none; font-size: 17px; font-weight: 700; cursor: pointer; transition: all .12s; }
+    .start { background: var(--accent); color: #111; }
+    .start.running { background: #333; color: var(--text); }
+    .mode-row { display: flex; gap: 6px; }
+    .mode-btn { flex: 1; min-width: 0; height: 42px; border-radius: 10px; border: 1px solid var(--border); background: rgba(255,255,255,.05); color: var(--text); font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+    .mode-btn.active { background: rgba(255,77,0,.25); border-color: var(--accent); }
+    .mode-btn.small { flex: 0 0 auto; padding: 0 12px; }
+
+    .slider-wrap { padding: 2px 0; }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    input[type=range] { width: 100%; height: 28px; accent-color: var(--accent); margin: 0; }
+    .scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+
+    .note { font-size: 11px; color: var(--muted); line-height: 1.35; }
+    .gps-status { font-size: 12px; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,.04); min-height: 28px; }
+    .gps-status.ok { color: var(--ok); }
+    .gps-status.warn { color: #ffc24a; }
+    .demo-tag { display: inline-block; font-size: 11px; font-weight: 700; color: #111; background: var(--accent2); border-radius: 6px; padding: 1px 6px; margin-right: 6px; }
+
+    /* Narrow split-screen pane */
+    @media (max-width: 560px) {
+      .hud { grid-template-columns: auto auto; }
+      .meta { grid-column: 1 / -1; justify-content: space-between; }
+      .mode-btn { font-size: 13px; }
+    }
+    /* Short screens: tighten everything */
+    @media (max-height: 720px) {
+      header { padding: 6px 10px; }
+      .big-btn { height: 44px; font-size: 16px; }
+      .mode-btn { height: 36px; }
+      .eng-btn { padding: 8px 10px; font-size: 13px; }
+      .note { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Tesla Motorlyd</h1>
+    <div class="status" id="status">Klar</div>
+  </header>
+
+  <main>
+    <div class="panel engines" id="engines"></div>
+
+    <div class="panel hud">
+      <div class="rpm" id="rpm">0 <small>RPM</small></div>
+      <div class="gear-big" id="gear">N</div>
+      <div class="meta">
+        <div class="speed">Fart<br><b id="speed">0</b> <span id="speedSrc">km/h</span></div>
+        <div>Gir<br><b id="gearNum">—</b></div>
+        <div>Last<br><b id="load">0</b>%</div>
+      </div>
+      <div class="tach"><div class="fill" id="tachFill"></div><div class="red"></div></div>
+    </div>
+
+    <div class="panel controls">
+      <button class="big-btn start" id="startBtn">Start motor</button>
+
+      <div class="mode-row">
+        <button class="mode-btn active" id="modeTest">Test</button>
+        <button class="mode-btn" id="modeGps">GPS / Kjøring</button>
+        <button class="mode-btn" id="modeDemo" title="Simulert kjøretur med falske GPS-målinger">Demo-tur</button>
+      </div>
+
+      <div class="mode-row" id="driveModeRow">
+        <button class="mode-btn active" id="modeNormal">Normal</button>
+        <button class="mode-btn" id="modeSport">Sport</button>
+        <button class="mode-btn small" id="popsBtn" title="Knatring / smell fra eksosen ved gasslipp">Knatring: av</button>
+      </div>
+
+      <div class="slider-wrap" id="speedWrap">
+        <label>Fart (test) — dra opp for å akselerere, ned for å bremse</label>
+        <input type="range" id="targetSpeed" min="0" max="200" step="1" value="0">
+        <div class="scale"><span>0</span><span id="targetVal">Mål: 0 km/h</span><span>200</span></div>
+      </div>
+
+      <div class="gps-status" id="gpsStatus">Testmodus — bruk fart-slideren</div>
+
+      <div class="vol">
+        <label>Volum</label>
+        <input type="range" id="volume" min="0" max="100" value="70">
+      </div>
+
+      <div class="note">
+        Åpne siden i Tesla-nettleseren (fungerer også i delt skjerm ved siden av kartet).<br>
+        Trykk Start motor og tillat posisjon for GPS-modus. Lyden følger bilens ekte fart og akselerasjon.
+        Demo-tur er en simulert kjøretur for testing uten bil.
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
