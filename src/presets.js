@@ -41,7 +41,7 @@
  * (gear, speed, throttle) is obviously not in here either.
  */
 
-import { ENGINE_PROFILES } from './profiles.js';
+import { ENGINE_PROFILES, EV_LIMITS } from './profiles.js';
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const fin = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
@@ -354,6 +354,18 @@ export function normalisePreset(input) {
   // The muffler is an array in the profile but addressed as `muffler.0..2`, so
   // setPath built a plain object for it. Convert back or resonators.js, which
   // iterates it, gets nothing.
+  // Electric drive (profiles.js `taycan`): carry the type and its own
+  // clamped parameter block; everything else above still feeds the
+  // drivetrain model.
+  if (e.type === 'electric') {
+    out.engine.type = 'electric';
+    const ev = (e.electric && typeof e.electric === 'object') ? e.electric : {};
+    out.engine.electric = {};
+    for (const [k, [d, lo, hi]] of Object.entries(EV_LIMITS)) {
+      out.engine.electric[k] = clamp(fin(ev[k], d), lo, hi);
+    }
+  }
+
   const m = out.engine.exhaust.muffler;
   out.engine.exhaust.muffler = [0, 1, 2].map(i => clamp(fin(m && m[i], 0.2), 0, 0.8));
   out.eq = [0, 1, 2, 3, 4].map(i => clamp(fin(out.eq[i], 0), -18, 18));

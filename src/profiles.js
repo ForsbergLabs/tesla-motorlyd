@@ -267,7 +267,41 @@ export const ENGINE_PROFILES = {
     intake: { helmholtz: 142, q: 7.0, level: 0.44 },
     voice: 1.04,
   },
+
+  // Electric drive, Taycan-inspired. `type: 'electric'` swaps the combustion
+  // voices for ElectricDrive (electric.js): a synthesised turbine/spaceship hum
+  // whose pitch follows road speed, with no gears, pulses, turbo or pops. The
+  // combustion fields below only feed the (muted) drivetrain model and the
+  // controller's load estimate; they are an i6's, so that model stays sane.
+  taycan: {
+    label: 'Porsche Taycan-stil (EV)',
+    type: 'electric',
+    electric: { droneHz: 46, hzPerKmh: 0.9, maxMotorRpm: 16000, vmaxKmh: 260, whineOrder: 6, level: 1 },
+    cylinders: 6, firingOrder: [1, 5, 3, 6, 2, 4], banks: [[1, 2, 3, 4, 5, 6]],
+    idleRpm: 750, redlineRpm: 7000, peakTorque: 420, peakTorqueRpm: 3000,
+    gears: 7,
+    engineInertia: 0.27, gasTempFactor: 1.28,
+    pulse: { attack: 30, decay: 5.0, hardness: 0.58, jitter: 0.7 },
+    exhaust: { bank: 1.55, collector: 1.20, reflection: 0.54, damping: 0.38, muffler: [0.33, 0.21, 0.14] },
+    intake: { helmholtz: 95, q: 6.4, level: 0.33 },
+    voice: 1.0,
+  },
 };
+
+/**
+ * Defaults and limits for an electric profile's `electric` section.
+ * [default, min, max] — presets.js clamps a loaded file into these.
+ */
+export const EV_LIMITS = Object.freeze({
+  droneHz: [46, 20, 200],
+  hzPerKmh: [0.9, 0, 5],
+  maxMotorRpm: [16000, 3000, 25000],
+  vmaxKmh: [260, 80, 400],
+  whineOrder: [6, 1, 48],
+  level: [1, 0, 2],
+});
+export const EV_DEFAULTS = Object.freeze(
+  Object.fromEntries(Object.entries(EV_LIMITS).map(([k, [d]]) => [k, d])));
 
 /**
  * Crank angle (0–720°) at which each cylinder fires.

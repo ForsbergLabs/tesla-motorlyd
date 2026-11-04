@@ -21,6 +21,9 @@ const ENGINES = [
   { id: 'i5', label: 'Inline-5' },
   { id: 'vtwin', label: 'V-twin' },
   { id: 'v6tt', label: 'V6 Twin-Turbo', turbo: true, base: 'v6tt' },
+  // Electric drive (electric.js): synthesised, Taycan-inspired turbine hum.
+  // Pitch follows speed, no gears, no turbo, no pops.
+  { id: 'taycan', label: 'Porsche Taycan-stil (EV)', electric: true },
 ];
 
 // Turbo set-up: modern low-inertia turbo with boost from ~2200 rpm and a
@@ -186,9 +189,15 @@ function frame(now) {
     const st = sim.getState();
     const rpm = Math.round(st.rpm || 0);
     el.rpm.innerHTML = rpm + ' <small>RPM</small>';
-    const g = st.gear || 0;
-    el.gear.textContent = g > 0 ? g : 'N';
-    el.gearNum.textContent = g > 0 ? `${g}/${st.gearCount}` : '—';
+    if (st.electric) {
+      // One fixed reduction: show the drive selector, not a gear number.
+      el.gear.textContent = 'D';
+      el.gearNum.textContent = 'EV · 1-trinn';
+    } else {
+      const g = st.gear || 0;
+      el.gear.textContent = g > 0 ? g : 'N';
+      el.gearNum.textContent = g > 0 ? `${g}/${st.gearCount}` : '—';
+    }
     el.speed.textContent = Math.round(ctl.displayV * 3.6);
     el.load.textContent = Math.round((st.load || 0) * 100);
     el.tach.style.width = Math.min(100, (rpm / (st.redline || 7000)) * 100) + '%';

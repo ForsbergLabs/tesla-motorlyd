@@ -29,6 +29,7 @@ import { TransmissionLayer, TurboLayer, TransientBank } from './layers.js';
 import { ExhaustNoise, SubLayer, CharacterModulator } from './character.js';
 import { INPUT_SCHEMA, DEFAULT_INPUTS } from './inputs.js';
 import { Drivetrain } from './physics.js';
+import { ElectricDrive } from './electric.js';
 import { gearVehicle } from './gearbox.js';
 import { EQ, Reverb, Stereoizer, Dynamics, SafetyClipper, BassEnhancer, Space, compressorMakeupDb } from './fx.js';
 
@@ -312,12 +313,22 @@ export class EngineSim {
     this._destination = null;
     this.connect(this._destOpt || ctx.destination);
 
-    // One gain per voice so the balance is user-controllable.
+    // One gain per voice so the balance is user-controllable. They sum into
+    // `combBus`, which an electric profile mutes and unhooks (see
+    // _syncElectric) — unity and transparent for every combustion engine.
+    this.combBus = ctx.createGain();
+    this.combBus.gain.value = 1;
+    this.combBus.connect(this.mixBus);
+    this._combConnected = true;
+    // The electric drive's own entry into the same tone stage.
+    this.evBus = ctx.createGain();
+    this.evBus.gain.value = 1;
+    this.evBus.connect(this.mixBus);
     this.busses = {};
     for (const name of Object.keys(DEFAULT_MIX)) {
       const g = ctx.createGain();
       g.gain.value = this.mix[name];
-      g.connect(this.mixBus);
+      g.connect(this.combBus);
       this.busses[name] = g;
     }
   }
@@ -468,6 +479,35 @@ export class EngineSim {
     // tremolo were the wavetable source's stand-in for that, and read as
     // synthetic wobble on top of it.
     if (this.character) this.character.setEventSource(!!this.combustion);
+
+    this._syncElectric();
+  }
+
+  /** Whether the fitted profile is an electric drive (profiles.js `type`). */
+  get isElectric() { return this.profile && this.profile.type === 'electric'; }
+
+  /**
+   * Electric profile: build the ElectricDrive voice and take the combustion
+   * voices out of the mix (they keep running for the drivetrain model, but
+   * nothing of them is heard). Combustion profile: no EV voice, combustion
+   * bus back in. The old EV voice, if any, was disposed with _modules().
+   */
+  _syncElectric() {
+    const ctx = this.ctx;
+    this.ev = null;
+    if (this.isElectric) {
+      this.ev = new ElectricDrive(ctx, this.profile.electric);
+      this.ev.output.connect(this.evBus);
+      // The chorus pair is already stereo; it joins after the stereoizer.
+      this.ev.wide.connect(this.dynamics.input);
+    }
+    const want = !this.ev;
+    if (want !== this._combConnected) {
+      if (want) this.combBus.connect(this.mixBus);
+      else this.combBus.disconnect();
+      this._combConnected = want;
+    }
+    this.combBus.gain.value = want ? 1 : 0;
   }
 
   /** A soft/hard wavetable pair sharing one frequency, crossfaded by load. */
@@ -566,7 +606,7 @@ export class EngineSim {
   _modules() {
     return [this.exhaust, this.intake, this.transmission,
             this.turbo, this.transients, this.exhaustNoise, this.sub,
-            this.character, this.cabin].filter(Boolean);
+            this.character, this.ev, this.cabin].filter(Boolean);
   }
 
   // =========================================================================
@@ -1008,6 +1048,12 @@ export class EngineSim {
       overrun: p ? p.overrun : 0,
       rpmNorm: p ? p.rpmNorm : 0,
       dRpm: p ? p.dRpm : 0,
+      // Electric drive: motor rpm (single reduction, ∝ road speed) and the
+      // pedal-following load instead of the muted combustion model's.
+      ...(this.ev ? {
+        rpm: this.ev.motorRpm, redline: this.ev.cfg.maxMotorRpm,
+        load: this.ev.load, gear: 1, gearCount: 1, electric: true,
+      } : { electric: false }),
       engine: this.engineId,
       engineLabel: this.presetLabel || this.profile.label,
       // Whether the turbo is bolted on right now. It belongs to no engine, so a
