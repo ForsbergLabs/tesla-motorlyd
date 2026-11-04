@@ -94,7 +94,7 @@ export const DEFAULT_SOUND = Object.freeze({
   }),
   /** 0 = standing outside the car, 1 = sitting in it. Continuous. */
   position: 0,
-  volume: 0.7,
+  volume: 0.85,
 });
 
 // ---------------------------------------------------------------------------
@@ -298,7 +298,7 @@ export function normalisePreset(input) {
     fx: {},
     turbo: {},
     position: 0,
-    volume: 0.7,
+    volume: 0.85,
   };
 
   // --- architecture: carried, not adjustable ------------------------------
