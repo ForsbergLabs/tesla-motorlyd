@@ -32,6 +32,11 @@ import { Drivetrain } from './physics.js';
 import { gearVehicle } from './gearbox.js';
 import { EQ, Reverb, Stereoizer, Dynamics, SafetyClipper, BassEnhancer, Space, compressorMakeupDb } from './fx.js';
 
+// Fixed output gain ahead of the final limiter: +6 dB (x2.0). Together with
+// the volume default 0.7 → 0.85 this is ~+7.7 dB at the default fader setting.
+const OUTPUT_BOOST = 2.0;
+const LIMITER_THRESHOLD_DB = -3;
+
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
 /**
@@ -245,19 +250,29 @@ export class EngineSim {
     // fast, high ratio, threshold just under unity, so it is inaudible until
     // something would otherwise distort.
     this.limiter = ctx.createDynamicsCompressor();
-    this.limiter.threshold.value = -1.5;
-    // Soft knee, 4 ms attack, 160 ms release. At knee 0 / 1 ms / 50 ms it
+    // Output loudness (nov. 2026): every engine was 6-9 dB too quiet in the
+    // car (peaks -6.5 to -15 dBFS, -19 to -29 LUFS), so the Tesla had to be at
+    // full volume. The volume fader now sits BEFORE a fixed output boost and
+    // this limiter, so the limiter catches the boosted peaks at any fader
+    // setting. Threshold -1.5 → -3 dBFS keeps the limited peaks inside the
+    // gentle part of the safety clipper (no audible saturation).
+    this.limiter.threshold.value = LIMITER_THRESHOLD_DB;
+    // Soft knee, 3 ms attack, 150 ms release. At knee 0 / 1 ms / 50 ms it
     // snapped the gain on every peak, and once the mids were brought forward
     // it was grabbing often enough to be heard as clicks (V6: 2.1/s, all of
     // them gone with the limiter bypassed; 0.5/s with these settings).
     this.limiter.knee.value = 4;
     this.limiter.ratio.value = 20;
-    this.limiter.attack.value = 0.004;
-    this.limiter.release.value = 0.16;
-    // The compressor adds its own makeup (+0.86 dB here); take it back out
-    // so the limiter never raises anything. See compressorMakeupDb.
+    this.limiter.attack.value = 0.003;
+    this.limiter.release.value = 0.15;
+    // The compressor adds its own makeup; take it back out so the limiter
+    // never raises anything. See compressorMakeupDb.
     this.limiterTrim = ctx.createGain();
-    this.limiterTrim.gain.value = Math.pow(10, -compressorMakeupDb(-1.5, 20, 4) / 20);
+    this.limiterTrim.gain.value = Math.pow(10, -compressorMakeupDb(LIMITER_THRESHOLD_DB, 20, 4) / 20);
+    // Fixed output boost between the volume fader and the limiter. Applies to
+    // every engine equally, so the balance between them is unchanged.
+    this.outputBoost = ctx.createGain();
+    this.outputBoost.gain.value = OUTPUT_BOOST;
     // And behind everything, a soft clipper: the limiter has look-ahead and a
     // finite attack, so a bang on top of a full-scale note can overshoot it.
     this.safety = new SafetyClipper(ctx);
@@ -284,10 +299,12 @@ export class EngineSim {
     this.space.output.connect(this.reverb.input);
     this.reverb.output.connect(this.stereo.input);
     this.stereo.output.connect(this.dynamics.input);
-    this.dynamics.output.connect(this.limiter);
+    // dynamics → volume fader → output boost → limiter → trim → safety clipper
+    this.dynamics.output.connect(this.master);
+    this.master.connect(this.outputBoost);
+    this.outputBoost.connect(this.limiter);
     this.limiter.connect(this.limiterTrim);
-    this.limiterTrim.connect(this.master);
-    this.master.connect(this.safety.input);
+    this.limiterTrim.connect(this.safety.input);
     // Routable output. A game usually has its own mixer — a music bus, a master
     // fader, an analyser for a visualiser — and hard-wiring to ctx.destination
     // forces the engine to be the last thing in the chain. Pass
